@@ -11,15 +11,102 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 #install.packages("ISLR")
 #install.packages("rpart")
-install.packages('rpart')
+#install.packages('rpart')
+install.packages("ipred")
+library(ipred)
 library(ISLR)
 #library("rpart")
 library("rpart")
-find.package('ISLR')
+set.seed(123)
 ```
 
+```{r}
+get_accuracy <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  accuracy = round((TP + TN) / sum(TP,FP,TN,FN), 2)
+  return(accuracy)
+}
+
+get_classification_error_rate <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  classification_error_rate = round((FP + FN) / sum(TP,FP,TN,FN),2)
+  return(classification_error_rate)
+}
+
+get_precision <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  precision = round(TP / (TP + FP), 2)
+  return(precision)
+}
 
 
+get_sensitivity <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  sensitivity = round(TP / (TP + FN), 2)
+  return(sensitivity)
+}
+
+get_specificity <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  specificity = round(TN / (TN + FP), 2)
+  return(specificity)
+}
+
+get_f1_score <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  
+  precision = round(TP / (TP + FP), 2)
+  sensitivity = round(TP / (TP + FN), 2)
+  f1_score = round((2 * precision * sensitivity) / (precision + sensitivity), 2)
+  return(f1_score)
+}
+
+get_false_positive_rate <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  
+  fpr = round(FP / (FP + TN), 2)
+  return(fpr)
+}
+
+get_false_negative_rate <- function(predicted, actual){
+  confusion_table = table(predicted, actual)
+  TP = confusion_table[2,2]
+  TN = confusion_table[1,1]
+  FN = confusion_table[1,2]
+  FP = confusion_table[2,1]
+  
+  fnr = round(FN / (FN + TP), 2)
+  return(fnr)
+}
+```
 ## Section 1
 ### Question 1.1
 Create a training set of 800 observations, and a test set containing the rest using the following code:
@@ -31,6 +118,7 @@ id.train=sample(1:n,size=800)
 id.test=setdiff(1:n,id.train)
 OJ.train=OJ[id.train,-3]
 OJ.test=OJ[id.test,-3]
+sapply(OJ,class)
 ```
 
 ### Question 1.2
@@ -38,6 +126,27 @@ Construct an unpruned classification tree to predict the variable purchase using
 ```{r}
 # ```{r pressure, echo=FALSE}
 tree <- rpart(OJ.train$Purchase ~ . ,data = OJ.train, method = 'class')
-summary(tree)
-```
+#summary(tree)
 
+pred = predict(tree,newdata = OJ.test,type = c("class"))
+
+print(paste0("False Positive Rate: ", get_false_positive_rate(OJ.test$Purchase,pred)))
+
+print(paste0("Error Rate: ", get_classification_error_rate(OJ.test$Purchase,pred)))
+
+print(paste0("False Negative Rate: ", get_false_negative_rate(OJ.test$Purchase,pred)))
+
+```
+### Question 1.3
+Using all the data (training and test put together), use the bagging approach to do the same analysis again and compare the results of the different error rates.
+```{r}
+model <- bagging(formula = Purchase ~ ., 
+                        data = OJ,
+                        #nbagg = 150,   
+  coob = TRUE
+  #control = rpart.control(minsplit = 2, cp = 0)
+)
+
+summary(model)
+
+```
