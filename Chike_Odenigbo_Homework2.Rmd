@@ -1,0 +1,43 @@
+---
+title: "Homework 2"
+author: "Chike Odenigbo"
+date: "November 6, 2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("ISLR")
+#install.packages("rpart")
+install.packages('rpart')
+library(ISLR)
+#library("rpart")
+library("rpart")
+find.package('ISLR')
+```
+
+
+
+## Section 1
+### Question 1.1
+Create a training set of 800 observations, and a test set containing the rest using the following code:
+```{r}
+# ```{r pressure, echo=FALSE}
+n <- nrow(OJ)
+set.seed(1234)
+id.train=sample(1:n,size=800)
+id.test=setdiff(1:n,id.train)
+OJ.train=OJ[id.train,-3]
+OJ.test=OJ[id.test,-3]
+```
+
+### Question 1.2
+Construct an unpruned classification tree to predict the variable purchase using the available predictors. Calculate the false positive rate, false negative rate and overall error rate of this tree on the test data (note: you can use your code from the previous assignment directly for this question).
+```{r}
+# ```{r pressure, echo=FALSE}
+tree <- rpart(OJ.train$Purchase ~ . ,data = OJ.train, method = 'class')
+summary(tree)
+```
+
