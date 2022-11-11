@@ -8,15 +8,18 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+#install.packages("knitr")
 knitr::opts_chunk$set(echo = TRUE)
 #install.packages("ISLR")
-#install.packages("rpart")
 #install.packages('rpart')
-install.packages("ipred")
+#install.packages("ipred")
+#install.packages("randomForest")
+#install.packages("adabag")
+library(randomForest)
 library(ipred)
 library(ISLR)
-#library("rpart")
-library("rpart")
+library(rpart)
+library(adabag)
 set.seed(123)
 ```
 
@@ -116,9 +119,11 @@ n <- nrow(OJ)
 set.seed(1234)
 id.train=sample(1:n,size=800)
 id.test=setdiff(1:n,id.train)
+OJ$Purchase = as.factor(OJ$Purchase)
+OJ$Store7 = as.factor(OJ$Store7)
+as.data.frame(sapply(OJ,class))
 OJ.train=OJ[id.train,-3]
 OJ.test=OJ[id.test,-3]
-sapply(OJ,class)
 ```
 
 ### Question 1.2
@@ -137,16 +142,74 @@ print(paste0("Error Rate: ", get_classification_error_rate(OJ.test$Purchase,pred
 print(paste0("False Negative Rate: ", get_false_negative_rate(OJ.test$Purchase,pred)))
 
 ```
+
+
 ### Question 1.3
 Using all the data (training and test put together), use the bagging approach to do the same analysis again and compare the results of the different error rates.
 ```{r}
-model <- bagging(formula = Purchase ~ ., 
-                        data = OJ,
-                        #nbagg = 150,   
-  coob = TRUE
-  #control = rpart.control(minsplit = 2, cp = 0)
-)
+set.seed(1)
+n_pred <- ncol(OJ.train) - 1
 
-summary(model)
+bag.OJ <- randomForest(OJ.train$Purchase ~ .,
+                           data = OJ.train,
+                           mtry=n_pred, 
+                           importance=TRUE)
 
+bag.pred = predict(bag.OJ,newdata = OJ.test,type = c("class"))
+
+print(paste0("False Positive Rate: ", get_false_positive_rate(OJ.test$Purchase,bag.pred)))
+
+print(paste0("Error Rate: ", get_classification_error_rate(OJ.test$Purchase,bag.pred)))
+
+print(paste0("False Negative Rate: ", get_false_negative_rate(OJ.test$Purchase,bag.pred)))
+
+```
+
+### Question 1.4
+Using all the data (training and test put together), use the random forest approach to redo the same analysis and compare the results of the different error rates.
+```{r}
+set.seed(1)
+
+rf.OJ <- randomForest(OJ.train$Purchase ~ .,
+                           data = OJ.train,
+                           #mtry=n_pred, 
+                           importance=TRUE)
+
+rf.pred = predict(rf.OJ,newdata = OJ.test,type = c("class"))
+
+print(paste0("False Positive Rate: ", get_false_positive_rate(OJ.test$Purchase,rf.pred)))
+
+print(paste0("Error Rate: ", get_classification_error_rate(OJ.test$Purchase,rf.pred)))
+
+print(paste0("False Negative Rate: ", get_false_negative_rate(OJ.test$Purchase,rf.pred)))
+
+```
+
+### Question 1.5
+Calculate the importance of the variables in the classification tree constructed in 2) and the forest constructed in 4). Compare.
+```{r}
+set.seed(1)
+
+as.data.frame(importance(rf.OJ))
+varImpPlot(rf.OJ)
+```
+
+```{r}
+set.seed(1)
+
+as.data.frame(tree$variable.importance)
+#varImpPlot(tree)
+```
+
+### Question 1.6
+Using all the data (training and test put together), use the boosting approach to do the same analysis again and compare the results of the error rates between all tested methods.
+```{r}
+set.seed(1)
+
+boost.OJ = boosting(factor(OJ.train$Purchase) ~ ., 
+                    data=OJ.train, 
+                    #mfinal = 100, 
+                    coeflearn = 'Freund') 
+                    #control=rpart.control(maxdepth=10))
+boost.OJ$importance
 ```
