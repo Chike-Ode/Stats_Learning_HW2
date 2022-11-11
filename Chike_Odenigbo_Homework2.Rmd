@@ -9,17 +9,19 @@ output:
 
 ```{r setup, include=FALSE}
 #install.packages("knitr")
-knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE)
 #install.packages("ISLR")
 #install.packages('rpart')
 #install.packages("ipred")
 #install.packages("randomForest")
 #install.packages("adabag")
+#install.packages("rpart.plot")
 library(randomForest)
 library(ipred)
 library(ISLR)
 library(rpart)
 library(adabag)
+library(rpart.plot)
 set.seed(123)
 ```
 
@@ -206,10 +208,36 @@ Using all the data (training and test put together), use the boosting approach t
 ```{r}
 set.seed(1)
 
-boost.OJ = boosting(factor(OJ.train$Purchase) ~ ., 
+boost.OJ = boosting(Purchase ~ ., 
                     data=OJ.train, 
                     #mfinal = 100, 
-                    coeflearn = 'Freund') 
+                    coeflearn = 'Freund')#,
                     #control=rpart.control(maxdepth=10))
-boost.OJ$importance
+boost.pred = predict(boost.OJ,newdata = OJ.test,type = c("class"))
+
+print(paste0("False Positive Rate: ", get_false_positive_rate(OJ.test$Purchase,boost.pred$class)))
+
+print(paste0("Error Rate: ", get_classification_error_rate(OJ.test$Purchase,boost.pred$class)))
+
+print(paste0("False Negative Rate: ", get_false_negative_rate(OJ.test$Purchase,boost.pred$class)))
+```
+
+## Section 2
+### Question 2.1
+Create a training and test dataset of size 300 and 100 respectively using the following code:
+```{r}
+set.seed(123456)
+n=nrow(Carseats)
+id.train=sample(1:n,size=300)
+id.test=setdiff(1:n,id.train)
+Carseat.train=Carseats[id.train,]
+Carseat.test=Carseats[id.test,]
+```
+
+### Question 2.2
+Create a training and test dataset of size 300 and 100 respectively using the following code:
+```{r}
+tree.reg <- rpart(Sales ~ . ,data = Carseat.train, method = 'anova')
+
+rpart.plot(tree.reg)
 ```
