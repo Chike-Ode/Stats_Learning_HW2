@@ -16,12 +16,14 @@ output:
 #install.packages("randomForest")
 #install.packages("adabag")
 #install.packages("rpart.plot")
+#install.packages("caret")
 library(randomForest)
 library(ipred)
 library(ISLR)
 library(rpart)
 library(adabag)
 library(rpart.plot)
+library(caret)
 set.seed(123)
 ```
 
@@ -235,9 +237,101 @@ Carseat.test=Carseats[id.test,]
 ```
 
 ### Question 2.2
-Create a training and test dataset of size 300 and 100 respectively using the following code:
+Construct a regression tree predicting the variable Sales from the other variables available in the training sample. Graph the tree and interpret the results.
+
+**ANSWER:**
+*** ***
 ```{r}
 tree.reg <- rpart(Sales ~ . ,data = Carseat.train, method = 'anova')
+```
 
+```{r}
 rpart.plot(tree.reg)
 ```
+
+### Question 2.3
+Calculate the MSE on the test data.
+```{r}
+pred.reg.tree = predict(tree.reg, newdata = Carseat.test) 
+mean((pred.reg.tree - Carseat.test$Sales)^2)
+```
+### Question 2.4
+Use cross-validation to determine the optimal level of complexity parameter to prune the tree. Does pruning improve the MSE?
+```{r}
+set.seed(400)
+data_ctrl = trainControl(method = "cv", number = 10)
+mytree.caret = train(Sales~.,data=Carseat.train, method = "rpart",  trControl=data_ctrl)
+#mytree.caret$resample
+#mytree.caret$results
+mytree.caret$bestTune
+pred.cv.tree = predict(mytree.caret,newdata = Carseat.test)
+mean((pred.cv.tree - Carseat.test$Sales)^2)
+```
+
+### Question 2.5
+Repeat the previous question several times (with a different seed) - and look at the differences between the results obtained. What do you conclude?
+```{r}
+#set.seed(0)
+seed.list = sample.int(100, 10)
+df = data.frame()
+
+for (seed in seed.list){
+  set.seed(seed)
+  data_ctrl = trainControl(method = "cv", number = 10)
+  mytree.caret = train(Sales~.,data=Carseat.train, method = "rpart",  trControl=data_ctrl)
+  #mytree.caret$resample
+  #mytree.caret$results
+  mytree.caret$bestTune
+  pred.cv.tree = predict(mytree.caret,newdata = Carseat.test)
+  mse = mean((pred.cv.tree - Carseat.test$Sales)^2)
+  output = c(seed,mse)
+  df = rbind(df, output)
+}
+colnames(df)<-c("seed", "mse")
+df
+```
+### Question 2.6
+Repeat the previous question several times (with a different seed) - and look at the differences between the results obtained. What do you conclude?
+```{r}
+set.seed(1)
+n_pred <- ncol(Carseat.train) - 1
+
+bag.reg <- randomForest(Carseat.train$Sales ~ .,
+                           data = Carseat.train,
+                           mtry=n_pred, 
+                           importance=TRUE)
+
+bag.reg.pred = predict(bag.reg,newdata = Carseat.test)#,type = c("anova"))
+mean((bag.reg.pred - Carseat.test$Sales)^2)
+```
+### Question 2.7
+Use the ***importance*** function to evaluate the importance of variables. Compare with the tree constructed at the beginning of the exercise.
+```{r}
+as.data.frame(importance(bag.reg))
+varImpPlot(bag.reg)
+```
+### Question 2.8
+Repeat the 2 previous questions using the random forest algorithm. Comment.**
+```{r}
+set.seed(1)
+n_pred <- ncol(Carseat.train) - 1
+
+rf.reg <- randomForest(Carseat.train$Sales ~ .,
+                           data = Carseat.train,
+                           #mtry=n_pred, 
+                           importance=TRUE)
+
+rf.reg.pred = predict(rf.reg,newdata = Carseat.test)#,type = c("anova"))
+mean((rf.reg.pred - Carseat.test$Sales)^2)
+```
+
+```{r}
+as.data.frame(importance(rf.reg))
+varImpPlot(rf.reg)
+```
+
+## Section 3
+### Question 3.1
+Take the data and example from the principal component regression tutorial. Using the graph of the number of PCs versus the cumulative proportion of variance explained, identify a number of PCs at which the variance explained seems to increase only marginally (note: I don’t expect you all to have the same answer). Run a principal component regression with this number of PCs and compare your results with those in the tutorial (MSE of the validation set).
+
+
