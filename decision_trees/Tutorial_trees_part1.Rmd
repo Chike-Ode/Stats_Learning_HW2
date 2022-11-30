@@ -1,0 +1,220 @@
+---
+title: "Chapter 5 - Classification tree"
+output:
+  html_document: default
+  pdf_document: default
+  number_sections: true
+---
+
+<style>
+p.exercice {
+background-color: #DBDBDB;
+padding: 10px;
+border: 1px solid black;
+margin-left: 5px;
+border-radius: 5px;
+font-style: italic;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse,verbose=FALSE)
+```
+
+<br>
+<br>
+
+In this chapter, we will work with the same example used in the logistic regression framework. We recall that we have a training dataset that contains 1,000 observations and a test dataset that contains 100,000 observations. The goal of the analysis is to predict, using the covariates present in the file, if a customer will make a purchase following a promotional offer. The data are in the file `dbm_final.csv`. The variable to predict is the variable `yachat` (for the classification case) or `ymontant` (for the regression case) and the available predictors are the following:
+
+
+* `sexe`: 0=male, 1=female
+* `age`: age in years
+* `revenu`: divided into 3 categories: 1= less than 35,000\$, 2= between 35,000\$ and 75,000\$ 
+* `region`: region where the client lives (coded from 1 to 5)
+* `conjoint`: does the client have a spouse (0=no, 1=yes)
+* `anneeclient`: number of years the customer has been with the
+company
+* `semainedernier`: number of weeks since the last extra purchase
+* `montantdernier`: amount (in $) of last extra purchase
+* `montantunan`: total amount (in $) spent since one year
+* `achatunan`: number of ``extra'' purchases in the last year
+
+
+
+Here is the code that reads the data and extracts only the training data for the target variable `yachat` binary:
+
+```{r}
+set.seed(400)
+setwd("/Users/mamadouthioub/Nextcloud/Cours MATH 60-603/Notes de cours 2022/05_Trees/R")
+mydata=read.csv("Data/dbm_final.csv")
+mydata$region=as.factor(mydata$region)
+head(mydata)
+
+mydata.train=mydata[mydata$train==1,-c(12,13,14)]
+attach(mydata.train)
+mydata.test=mydata[mydata$test==1,-c(12,13,14)]
+```
+The variable `region` is defined as a factor. On the other hand, the variable 'income' is ordinal, so we will leave it in the quantitative format.
+
+
+
+### Building the complete tree
+We will first see how to build a complete (thus **not pruned**) classification tree using the `rpart` library, which uses the CART algorithm described in class. Be careful, in order to minimize the computations, the command `rpart` will not really build the ``complete'' tree, but the most complete tree possible which respects the stopping conditions of the function (minimum number of observations per leaf, and stop if there is not a minimum of 1\% improvement of the Gini index by doing an additional split). 
+
+Here is the code to build and visualize the tree from all available variables:
+
+```{r}
+library(rpart)
+set.seed(400)
+mytree = rpart(yachat~., data=mydata.train, method = "class")
+plot(mytree)
+text(mytree)
+```
+
+
+The `rpart` library offers relatively limited display functions. We can however use the `rpart.plot` library, and in particular the `prp` command:
+```{r}
+library(rpart.plot)
+prp(mytree,extra=1,roundint=FALSE)
+```
+
+The `extra` option allows to get different levels of information display inside the nodes. The value `extra=1` displays the number of observations in the node for each class (0 and 1). Moreover, be aware of the convention in reading the tree: the question is asked on the parent node (e.g. `montandernier <8.5` ?) and the left child node corresponds to the answer YES, the right child node corresponds to the answer NO. We also notice that this tree does not use all the variables: this is normal since the tree is not really complete as we explained above.
+
+We can see the details of each node by simply printing the tree object as follows:
+```{r}
+print(mytree)
+```
+
+
+Here is how we can read this information: each node has a number and for each node we have the split condition, the number of observations in the node, the number of observations for which `yachat=1` in the node, and the predicted value for that node (using the class of the majority of observations in the node). 
+
+ For example, the 1st node is the root node. It contains 1,000 observations (which is expected), 210 observations belong to class 1 and the predicted class is therefore class 0 in this node. The estimated probabilities of each class for this node are 0.21 (=210/1000) for class 1 and 0.79 (=790/1000) for class 0. 
+
+For the second node on the left which corresponds to the condition `montantdernier <8.5` (with a YES answer for this condition), we have indeed 923 observations in the node, 162 of them are classified 1 and the predicted class is 0, with an estimated probability of 1 which is 162/923=0.1755. We can check this in the data:
+```{r}
+length(yachat[montantdernier< 8.5])
+length(yachat[montantdernier< 8.5 & yachat==1])
+```
+
+<p class="exercise">
+**Question**: Verify that you are able to find the values corresponding to node #10 by yourself.
+</p>
+
+It is possible to get a little more information about how the tree was constructed at each node (CART algorithm) with the `summary` command:
+```{r}
+summary(mytree)
+```
+
+You can see for example in this output the information about all the split trials at each node, with the improvement brought by each of the splits. The split chosen is the one that improves the Gini index the most, exactly as we saw in class.
+
+<p class="exercise">
+**Question**: Check that you are able to find by yourself the value of `improve` for the best split of neoud #2 (`improve=22.258700`)
+</p>
+
+
+
+### Pruning the tree
+As mentioned above, the tree shown above is not pruned, and corresponds to the most complete tree possible. But even if the tree shown is not the pruned tree, the pruning process that minimizes the penalized risk function is nevertheless performed by R in the `rpart` command. The command `printcp`, which reproduces the very beginning of the output of the command `summary` gives the following information:
+```{r}
+printcp(mytree)
+```
+Following the pruning algorithm described in the course, a set of complexity parameters (CP = complexity parameter) $\alpha$ is produced, each of them corresponding to an optimal pruned tree. The optimal value of $\alpha$ is chosen by cross validation, and the output gives us the following values:
+
+* 8 values of $\alpha$ proposed (`CP`) with the number of splits (`nsplit`) of the corresponding optimal tree. We can see that the bigger $\alpha$ is, the more we try to penalize the size of the tree, and thus the more we obtain an optimal tree with a small number of nodes. The tree corresponding to the largest value of $\alpha$ is moreover the tree made up only of the root node.
+* The classification error rate `rel error` for each optimal tree. This rate is the prediction error in the training data, relative to the error rate of the root tree. We can see, as expected, that as the complexity of the tree increases ($\alpha$ decreases), the error rate decreases in the training sample. 
+
+* The classification error rate `xerror` for each optimal tree. This rate gives the error rate (still relative to the root tree), but computed from a cross validation (by default with 10 partitions). We can see that this rate can be minimized for a given $\alpha$ value.
+
+* `xstd` is the standard deviation of the relative error rate of the cross validation.
+
+In order to prune the tree, we can choose the pruned tree corresponding to the $\alpha$ minimizing the cross validation error. We can visualize it graphically:
+```{r}
+plotcp(mytree)
+```
+
+You can see that the values of $\alpha$ on the graph do not exactly match the values listed in the table given by `printcp`. However, each value of $\alpha$ in an interval of $(\alpha_k,\alpha_{k+1})$ will produce the same optimal tree and thus the same values of error rate. Ideally, we will try to choose the smallest $\alpha$ such that the relative error is the lowest. In our case, it seems that the 5th value of $\alpha$ corresponds to this minimum. To find this value automatically, you can use the following code which uses the output of the command `mytree$cptable`, then proceed to the pruning of the tree which will choose the optimal tree corresponding to the chosen $\alpha$:
+```{r}
+mytree$cptable
+cp_optimal=mytree$cptable[which.min(mytree$cptable[,4]),1]
+cp_optimal
+mytree_optimal = prune(mytree,cp=cp_optimal)
+prp(mytree_optimal,extra=1,roundint=FALSE)
+
+```
+
+It is also possible to use the general model training procedure available in the `caret` library, as we have seen for the case of linear and logistic regression. The code is as follows:
+```{r}
+library(caret)
+library(e1071)
+set.seed(400)
+levels <- unique(mydata.train$yachat)
+mydata.train$yachat=factor(mydata.train$yachat, labels=make.names(levels))
+data_ctrl = trainControl(method = "cv", number = 10)
+mytree.caret = train(yachat~.,data=mydata.train, method = "rpart",  trControl=data_ctrl)
+mytree.caret$resample
+mytree.caret$results
+mytree.caret$bestTune
+mytree.caret$finalModel
+prp(mytree.caret$finalModel,extra=1,roundint=FALSE)
+```
+
+We can see that the best tree selected by the cross-validation is much smaller (1 node) than the tree selected directly by the `rpart` command. In fact, it is the pruning method that differs between the two: with `caret`, the best complexity parameter $\alpha$ is chosen through a grid of possible $\alpha$ values, specified by default at 3 values in our case. The $\alpha$ are chosen in a much more intelligent way with the `caret` command. It is possible to modify the search grid of the `train` command by putting for example the $\alpha$ values used by `rpart`:
+```{r}
+set.seed(400)
+mytree$cptable
+tuneGrid <- expand.grid(cp = mytree$cptable[,1])
+mytree.caret = train(yachat~.,data=mydata.train, method = "rpart",  
+              trControl=data_ctrl,tuneGrid = tuneGrid)
+mytree.caret$results
+mytree.caret$bestTune
+mytree.caret$finalModel
+prp(mytree.caret$finalModel,extra=1,roundint=FALSE)
+```
+
+Again, we see that the `train` command estimates the accuracy as being higher for the one node model ($\alpha=0.028$) than for the optimal model selected by `rpart`. This is probably due to the cross-validation method which is not identical in the two commands: the `train` command uses the bootstrap.
+
+
+### Prediction
+Like any learning model in R, it is possible to use the `predict` function to obtain predictions from an already built tree, on new data (in our case, the test data). By default, the `predict` function returns the predicted probabilities for each class (in our case: 0 or 1) for each observation, by simply using the ratio of 1 (or 0) in the tree leaf in which the observation to be predicted is located. The code is as follows to predict the first 10 values of the test data:
+```{r}
+predict(mytree_optimal,mydata.test[1:10,])
+```
+To obtain directly the predicted class instead of the probability of each class, the code is the following (using by default a cutoff of 0.5):
+```{r}
+predict(mytree_optimal,mydata.test[1:10,], type="class")
+```
+It is also possible to obtain measures of model performance (error rate, sensitivity, specificity, etc.) using the following prediction versus observed values table (on test data):
+```{r}
+mytable=table(mydata.test$yachat, predict(mytree_optimal,mydata.test, type="class"))
+names(dimnames(mytable))= c("Observed", "Predicted")
+mytable
+Accuracy=(mytable[1,1] + mytable[2,2])/100000
+Accuracy
+```
+We can do this again for the tree selected by `caret` to see the difference (note: to use the `predict` function with a `caret` object, the binary indicator variables for the factors (here region) must be added to the test dataset):
+```{r}
+mydata.test$region2=ifelse(mydata.test$region==2,1,0)
+mydata.test$region3=ifelse(mydata.test$region==3,1,0)
+mydata.test$region4=ifelse(mydata.test$region==4,1,0)
+mydata.test$region5=ifelse(mydata.test$region==5,1,0)
+predict(mytree.caret$finalModel,mydata.test[1:10,], type="class")
+mytable=table(mydata.test$yachat, predict(mytree.caret$finalModel,mydata.test, type="class"))
+names(dimnames(mytable))= c("Observed", "Predicted")
+mytable
+Accuracy=(mytable[1,1] + mytable[2,2])/100000
+Accuracy
+```
+We see that the tree produced by `caret` is worse (probably because it is too small) than the one produced by `rpart`, with an accuracy rate of 77\% versus 79\%.
+
+### Importance of variables
+As we saw in class, it is useful to have a measure of the importance of variables. For a tree built directly from the `rpart` command, we can simply get these measures with the following code:
+```{r}
+mytree_optimal$variable.importance
+```
+The measure of importance of the variables is not the same depending on the algorithm used. If we use the `caret` library, the calculation is a bit different and it is possible to obtain these measures as follows:
+```{r}
+varImp(mytree.caret)
+```
+As we can see, these measures are normalized differently: the most important variable automatically gets a score of 100 and the other scores are calculated according to the first one. The order obtained is also different from the one obtained by `rpart` - but this is nornal, the tree obtained is not the same.
+

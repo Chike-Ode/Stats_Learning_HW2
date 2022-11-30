@@ -17,6 +17,14 @@ output:
 #install.packages("adabag")
 #install.packages("rpart.plot")
 #install.packages("caret")
+#install.packages('mogavs')
+#install.packages("factoextra")
+#install.packages('pls')
+#install.packages('psy')
+library(psy)
+library(pls)
+library(mogavs)
+library(factoextra)
 library(randomForest)
 library(ipred)
 library(ISLR)
@@ -334,4 +342,100 @@ varImpPlot(rf.reg)
 ### Question 3.1
 Take the data and example from the principal component regression tutorial. Using the graph of the number of PCs versus the cumulative proportion of variance explained, identify a number of PCs at which the variance explained seems to increase only marginally (note: I don’t expect you all to have the same answer). Run a principal component regression with this number of PCs and compare your results with those in the tutorial (MSE of the validation set).
 
+**ANSWER:**
+***I would save the first 50 components***
 
+
+```{r}
+set.seed(60603)
+id=sample(1:nrow(crimeData))
+crimeData.pca = crimeData[id[1:1450],][,-123]
+crimeData.train=data.frame(apply(crimeData[id[1:1450],],2,scale))
+crimeData.valid=data.frame(apply(crimeData[id[1451:nrow(crimeData)],],2,scale))
+pca.res = prcomp(crimeData.pca, center = TRUE, scale. = TRUE)
+#summary(pca.res)$importance
+#round(pca.res$rotation,2)
+#data.frame(pca.res$x)
+
+plot(summary(pca.res)$importance[3,], xlab = "Number of Principal Components", ylab = "Proportion of Variance Explained" )
+
+model.crimeData.pca = pcr(y~., data = crimeData.train)
+
+
+pred.valid.tutorial=predict(model.crimeData.pca,newdata=crimeData.valid,ncomp=15)
+pred.valid.answer=predict(model.crimeData.pca,newdata=crimeData.valid,ncomp=50)
+MSE.valid.tutorial = sqrt(mean((crimeData.valid$y-pred.valid.tutorial)^2))
+MSE.valid.tutorial
+
+MSE.valid.answer = sqrt(mean((crimeData.valid$y-pred.valid.answer)^2))
+MSE.valid.answer
+
+rbind(MSE.valid.tutorial,MSE.valid.answer)
+```
+
+### Question 3.2
+It is also possible to choose the number of optimal PCs by using other criteria than the explained variance, such as the MSEP (mean squared error of prediction) or the R2 calculated by cross validation. You can obtain the graph of the number of PCs versus one of these measures with the following command (for the MSEP):
+
+**ANSWER:**
+***I would save the first 50 components***
+
+
+```{r}
+set.seed(60603)
+id=sample(1:nrow(crimeData))
+crimeData.pca = crimeData[id[1:1450],][,-123]
+crimeData.train=data.frame(apply(crimeData[id[1:1450],],2,scale))
+crimeData.valid=data.frame(apply(crimeData[id[1451:nrow(crimeData)],],2,scale))
+pca.res = prcomp(crimeData.pca, center = TRUE, scale. = TRUE)
+
+model.pcr.rmsep=pcr(y~., data = crimeData.train, validation="CV")
+validationplot(model.pcr.rmsep, val.type="RMSEP", cex.axis=0.7)
+axis(side = 1, at = c(8), cex.axis=0.7)
+abline(v = 8, col = "blue", lty = 3)
+```
+
+
+### Question 3.3
+Repeat the previous question using the R2, with the option **val.type="R2"**
+**ANSWER:**
+***I would save the first 50 components***
+
+
+```{r}
+set.seed(60603)
+id=sample(1:nrow(crimeData))
+crimeData.pca = crimeData[id[1:1450],][,-123]
+crimeData.train=data.frame(apply(crimeData[id[1:1450],],2,scale))
+crimeData.valid=data.frame(apply(crimeData[id[1451:nrow(crimeData)],],2,scale))
+pca.res = prcomp(crimeData.pca, center = TRUE, scale. = TRUE)
+
+model.pcr.r2=pcr(y~., data = crimeData.train, validation="CV")
+validationplot(object = model.pcr.r2, "validation",val.type = "R2")#, cex.axis=0.7)
+axis(side = 1, at = c(8), cex.axis=0.7)
+abline(v = 8, col = "blue", lty = 3)
+```
+
+## Section 4 Factor Analysis
+### Question 1.1
+In this question, we will analyze data on different measures of pastry texture. The data have 50 observations and 5 variables were measured:
+
+* Oil: oil content of the pastry
+* Density: density of the product (the higher the number, the denser the product)
+* Crispy: a measure of “crispness” on a scale of 7 to 15, with 15 representing the crispiest pastry
+* Fracture: the angle, in degrees, at which the pastry can be bent before it breaks
+* Hardness: force required to break the pastry
+
+The data are available in the file food.csv. The column labeled X represents the participant ID.
+
+Perform a factor analysis on these data. Identify the optimal number of factors, describe them and interpret them.
+**ANSWER:**
+***I would save the first 50 components***
+```{r}
+food.df = read.table("./Data/food.csv", header=TRUE, sep =",")
+
+#fact = 
+factanal(food.df[,-1], factors = 2,rotation = "varimax")$values
+
+cronbach(food.df[,-1])
+
+```

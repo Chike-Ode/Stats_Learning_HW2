@@ -1,0 +1,250 @@
+---
+title: "Chapter 10 - Dimension Reduction - Principal Component Regression"
+output:
+  html_document: default
+  pdf_document: default
+  number_sections: true
+---
+
+<style>
+p.exercice {
+background-color: #DBDBDB;
+padding: 10px;
+border: 1px solid black;
+margin-left: 5px;
+border-radius: 5px;
+font-style: italic;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse,verbose=FALSE)
+```
+
+<br>
+<br>
+
+
+The idea of principal component regression is to perform a linear (or other) regression using the PCs of a principal component analysis instead of the original variables. The advantage of such an analysis is of course the reduction of the dimension of the predictors, but it also avoids collinearity problems since the PCs are independent variables.
+
+### Data
+
+In this exercise, we will use a dataset that combines socioeconomic data from the 1990 U.S. Census, law enforcement data from the 1990 U.S. LEMAS survey, and crime data from the 1995 FBI UCR. The variable we seek to predict is the number of crimes per capita. The data is found in the `crimeData` object available in the `mogavs` library. The dataset contains 122 predictor variables gathering socio-economic, crime and police data, whose description can be found here: http://archive.ics.uci.edu/ml/datasets/Communities+and+Crime. The dataset is collected on 1994 large cities in the United States.
+
+The dependent variable is named `y`. Here is the code to access the data and create a training and validation dataset:
+
+```{r}
+library(mogavs)
+head(crimeData)
+dim(crimeData)
+
+set.seed(60603)
+id=sample(1:nrow(crimeData))
+mydata.train=crimeData[id[1:1450],]
+mydata.valid=crimeData[id[1451:nrow(crimeData)],]
+
+# Creation of a dataset without y to do the PCA only on the x
+mydata.pca=mydata.train[,-123]
+```
+
+Let's look at the correlation structure of the data. In the case of high dimensions, this can be visualized with the help of a correlation graph:
+
+```{r}
+library(corrplot)
+correl= cor(mydata.pca, method="pearson")
+corrplot(correl, method= "color", order = "hclust",tl.pos = 'n')
+```
+
+The `corrplot` function has several interesting options that allow us, among other things, to order the variables on the graph by groups of variables that are most correlated with each other. This graph allows us to see that there is a certain correlation pattern in the variables.
+
+When the variables have very different variances from each other caused by the unit of measurement of these variables, it is important to normalize the data before performing a PCA. Let's look at this here:
+```{r}
+summary(diag(var(mydata.pca)))
+```
+
+We can see here that the variance can vary by a factor of 40 (mariance-max / variance-min) between variables and therefore it is more prudent to normalize the data. This can be done with the `scale` function, or simply with the `center` and `scale` options of the `prcomp` function. Here is the function that allows you to do a PCA on the data:
+
+```{r}
+# Data normalization
+mydata.pca=data.frame(apply(mydata.pca,2,scale))
+mydata.train=data.frame(apply(mydata.train,2,scale))
+mydata.valid=data.frame(apply(mydata.valid,2,scale))
+```
+
+## PCA analysis
+
+We will now perform a principal component analysis on the data.
+
+```{r}
+# PCA Analysiz
+result.pca=prcomp(mydata.pca, center=TRUE, scale.=TRUE)
+
+# Display the first 6 rows of the PC matrix for the first 10 PCs 
+dim(result.pca$x)
+head(result.pca$x[,1:10])
+```   
+
+We can see that the PCs are not correlated:
+
+```{r}
+res=cor(result.pca$x, method="pearson")
+corrplot(res, method= "color", order = "hclust", tl.pos = 'n')
+```
+
+We can also see the proportion of cumulative variance explained by the PCs with the following controls and graph:
+```{r}
+summary(result.pca)$importance
+plot(summary(result.pca)$importance[3,])
+```
+
+We can see that with a few PCs (between 20 and 30), we manage to explain more than 80% of the variance of the 122 original variables.
+
+
+We will now fit several regression models and see the differences in the results:
+
+* A linear regression with all the original variables
+* A linear regression with all the PCs
+* A linear regression with only a subset of the PCs that explain a large percentage of the variance.
+
+
+### Regression model including all variables
+Let's start with a regression model containing all the original variables
+
+```{r}
+model0=lm(y~.,data=mydata.train)
+summary(model0)
+r2_0=summary(model0)$r.squared
+r2_0
+
+# Calculation of the MSE on the training sample
+pred0.train=predict(model0,newdata=mydata.train)
+MSE.train0=sqrt(mean((mydata.train$y-pred0.train)^2))
+MSE.train0
+
+# Calculation of the MSE on the validation sample
+pred0.valid=predict(model0,newdata=mydata.valid)
+MSE.valid0=sqrt(mean((mydata.valid$y-pred0.valid)^2))
+MSE.valid0
+```
+
+### Regression model including all PCs
+Now let's try to fit the same model, but using all 122 PCs instead of the original 122 variables.
+
+```{r}
+mydata.pc.train=data.frame(result.pca$x,y=mydata.train$y)
+model1=lm(y~.,data=mydata.pc.train)
+summary(model1)
+r2_1=summary(model1)$r.squared
+r2_1
+
+# Calculation of the MSE on the training sample
+pred1.train=predict(model1,newdata=mydata.pc.train)
+MSE.train1=sqrt(mean((mydata.pc.train$y-pred1.train)^2))
+MSE.train1
+
+# Comparison of the first 30 predicted values on the training sample
+cbind(pred0.train,pred1.train)[1:30,]
+```
+
+We can see that the predictions of the 2 models (123 original variables versus 123 PCs) on the training sample is identical. This is not surprising since the 2 sets of variables contain **exactly** the same information. 
+
+It is not trivial to compute the MSE on the validation sample, since we do not have at our disposal the values of the PCs for this sample, since they were computed with the learning sample. However, we can obtain them from the eigenvectors obtained during the PCA on the learning sample. In the learning sample, the PC matrix can be obtained using the following formula (seen in progress):
+$$
+X^*_{train}=X_{train}W_{train}
+$$
+
+where $X$ is the original predictor matrix, $W$ is the matrix of the weights of the PCs (eigenvectors) and $X^*$ is the new matrix of the PCs obtained. The matrix $W$ of eigenvectors can be obtained with the following function: 
+```{r echo = T, results = 'hide'}
+result.pca$rotation
+```
+
+For the validation dataset we can use the same formula using the weights $W$ of the training data and so we have
+$$
+X^*_{valid}=X_{valid}W_{train}
+$$
+Here is the code to calculate the PCs on the validation sample and to calculate the MSE of the model on this sample:
+```{r}
+ # Calculation of the PC on the validation sample
+PC.valid=as.matrix(mydata.valid[,-123])%*%as.matrix(result.pca$rotation)
+dim(PC.valid)
+mydata.pc.valid=data.frame(PC.valid,y=mydata.valid$y)
+
+# Prediction
+pred1.valid=predict(model1,newdata=mydata.pc.valid)
+MSE.valid1=sqrt(mean((mydata.pc.valid$y-pred1.valid)^2))
+MSE.valid1
+
+# Comparison of the first 30 predicted values on the validation sample
+cbind(pred0.valid,pred1.valid)[1:30,]
+
+```
+We can see that the results on the validation dataset are again identical.
+
+As we have seen, making predictions on the validation sample requires some programming, since the PCs on this sample are not obtained directly. There is in fact a predefined function in R that allows us to do principal component regression. This is what we will see now, using the `pcr` function available in the `pls` library. The code is the following:
+
+```{r}
+library(pls)
+model2=pcr(y~., data = mydata.train)
+
+# Prediction on the training set
+# Warning, the predict function returns the predicted values for 122 different regression models
+# The 1st model is a model with only PC1
+# The 2nd model is a model with PC1 and PC2
+# ...
+# The 122nd model is a model with all PCs
+pred2.train=predict(model2,newdata=mydata.train)
+dim(pred2.train)
+# Here we take the model with 122 PC
+pred2.train=pred2.train[,1,122]
+MSE.train2=sqrt(mean((mydata.train$y-pred2.train)^2))
+MSE.train2
+
+# Prediction on validation set
+pred2.valid=predict(model2,newdata=mydata.valid)
+pred2.valid=pred2.valid[,1,122]
+MSE.valid2=sqrt(mean((mydata.valid$y-pred2.valid)^2))
+MSE.valid2
+
+# Comparison of the 3 models on the training sample
+cbind(pred0.train,pred1.train,pred2.train)[1:30,]
+
+# Comparison of the 3 models on the validation sample
+cbind(pred0.valid,pred1.valid,pred2.valid)[1:30,]
+```
+As you can see, the results are identical between the 3 methods.
+
+### Regression model including a subset of the PCs explaining 80% of the variance
+
+We are now going to run a regression model that will include only a small number of PCs, explaining at least 80% of the total variance. We could have chosen another number of PCs, as we will see later. We can see the proportion of variance explained by the PCs as follows:
+
+```{r}
+summary(result.pca)$importance
+```
+
+Based on these results, we will choose the first 15 PCs, which represents a total of 80.48% of the total variance. To make it easier, we will use the `pcr` function:
+
+```{r}
+library(pls)
+model3=pcr(y~., data = mydata.train)
+pred3.train=predict(model3,newdata=mydata.train)
+dim(pred3.train)
+# Here we take the model with the first 15 PC
+pred3.train=pred3.train[,1,15]
+MSE.train3=sqrt(mean((mydata.train$y-pred3.train)^2))
+MSE.train3
+
+# Prediction on the validation validation set
+pred3.valid=predict(model3,newdata=mydata.valid)
+pred3.valid=pred3.valid[,1,15]
+MSE.valid3=sqrt(mean((mydata.valid$y-pred3.valid)^2))
+MSE.valid3
+
+# Comparison of the 4 models with respect to the MSE (validation)
+cbind(MSE.valid0,MSE.valid1,MSE.valid2,MSE.valid3)
+
+```
+
+We can see that the MSE is a bit higher than the MSE with all variables (or all PCs). This is normal, since we lost information by using only 15 PCs instead of 122. In dimension reduction, there is always an equilibrium to be found between losing information and reducing the number of variables.
+
+Everything we have seen in a regression context can be applied just as well to other prediction models, the idea being simply to use PCs instead of all the original variables in the model. 

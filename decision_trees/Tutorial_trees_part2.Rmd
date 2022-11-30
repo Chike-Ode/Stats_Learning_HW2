@@ -1,0 +1,110 @@
+---
+title: "Chapter 5 - regression tree"
+output:
+  html_document: default
+  pdf_document: default
+  number_sections: true
+---
+
+<style>
+p.exercice {
+background-color: #DBDBDB;
+padding: 10px;
+border: 1px solid black;
+margin-left: 5px;
+border-radius: 5px;
+font-style: italic;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse,verbose=FALSE)
+```
+
+<br>
+<br>
+
+We will use the same example as the one used for classification trees. Recall that we have a training data set containing 1,000 observations and a test data set containing 100,000 observations. The goal of the analysis is to predict, using the covariates present in the file, if a customer will make a purchase following a promotional offer. The data are in the file `dbm_final.csv`. The variable to predict is the variable `yachat` (for the classification case) or `ymontant` (for the regression case) and the available predictors are the following:
+
+* `sexe`: 0=male, 1=female
+* `age`: age in years
+* `revenu`: divided into 3 categories: 1= less than 35,000\$, 2= between 35,000\$ and 75,000\$ 
+* `region`: region where the client lives (coded from 1 to 5)
+* `conjoint`: does the client have a spouse (0=no, 1=yes)
+* `anneeclient`: number of years the customer has been with the
+company
+* `semainedernier`: number of weeks since the last extra purchase
+* `montantdernier`: amount (in $) of last extra purchase
+* `montantunan`: total amount (in $) spent since one year
+* `achatunan`: number of ``extra'' purchases in the last year
+
+
+
+
+We will now repeat the same analysis as in the case of the classification trees, but this time predicting the variable `ymontant`, which is the amount of money spent following the promotional offer. Here, we will consider this variable only for the customers who have bought something, and so we are trying to answer the following question: "knowing that a customer has made a purchase, how much will he spend? Here is the code to prepare the data with the new target variable:
+
+
+```{r}
+set.seed(400)
+mydata=read.csv("Data/dbm_final.csv")
+mydata$region=as.factor(mydata$region)
+head(mydata)
+mydata.train=mydata[mydata$train==1 & mydata$yachat==1,-c(11,13,14)]
+attach(mydata.train)
+mydata.test=mydata[mydata$test==1& mydata$yachat==1,-c(11,13,14)]
+```
+
+The code for fitting the regression tree is essentially the same as for the classification tree, this time with the `method=anova` option:
+```{r}
+library(rpart)
+library(rpart.plot)
+mytree = rpart(ymontant~., data=mydata.train, method = "anova")
+prp(mytree,extra=1,roundint=FALSE)
+summary(mytree)
+```
+For each node, the `improve` value is calculated here as the percentage change in the sum of squares:
+$$
+\frac{1}{n_{\text{parent}}} \left[ SS_{\text{noeud parent}}-(SS_{\text{enfant gauche}}+ SS_{\text{enfant droit}}) \right]
+$$
+where
+$$
+SS_{\text{noeud}}= \sum_{y_i \in \text{noeud}} (y_i-\bar{y})^2
+$$
+is the sum of squares for a node. Note that this also represents the gain in $R^2$. **Note, however, that the computation of `improve` in R is done on the standardized $Y$**. This does not change anything in the construction of the tree, but it does change the exact value of the `improve` criterion. 
+
+The pruning of the tree is done in the same way as for the classification. The code is the following, to find the optimal value of the complexity parameter $\alpha$:
+```{r}
+mytree$cptable
+```
+Note that here, the relative `rel error` is equal to $1-R^2$, as in the case of linear regression. It is possible to make some graphs to help us see what is the optimal value of the complexity parameter $\alpha$:
+```{r}
+rsq.rpart(mytree)
+```
+
+The first graph shows the $R^2$ versus the number of splits, and the second shows the Jacknife error versus the number of splits in the tree. Of course, we are looking for the smallest error - or the best $R^2$. Here, the full tree seems to be the best. Here is the code to build it:
+
+
+```{r}
+cp_optimal=mytree$cptable[which.min(mytree$cptable[,4]),1]
+cp_optimal
+```
+We see here that the optimal tree seems to be the complete tree. Nevertheless, here is the code to do the pruning:
+
+```{r}
+mytree_optimal = prune(mytree,cp=cp_optimal)
+prp(mytree_optimal,extra=1,roundint=FALSE)
+```
+
+Finally, it is possible to produce a graph of the residuals versus the predicted values, as in regression:
+```{r}
+plot(predict(mytree), jitter(resid(mytree)))
+```
+It seems here that the node that predicts a value of 89 for `ymontant` is the most variable.
+
+Finally, we can also use the `predict` function to predict the obervations of the test data:
+```{r}
+predict(mytree_optimal,mydata.test[1:10,])
+```
+Of course, you can use the `caret` library to do the same analysis. We don't do it here.
+
