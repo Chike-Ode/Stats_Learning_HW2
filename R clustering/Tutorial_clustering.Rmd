@@ -1,0 +1,392 @@
+---
+title: "Chapter 11 - Clustering Analysis (part 1)"
+output:
+  html_document: default
+  pdf_document: default
+  number_sections: true
+---
+
+<style>
+p.exercice {
+background-color: #DBDBDB;
+padding: 10px;
+border: 1px solid black;
+margin-left: 5px;
+border-radius: 5px;
+font-style: italic;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse,verbose=FALSE)
+```
+
+<br>
+<br>
+
+## Tour Data
+This chapter focuses on the segmentation of people 55 and older who participate in bus tours.
+bus tours. The data were generated from Hsu and Lee's (2002) article "Segmentation of Senior Motorcoach Travelers".
+
+The objectives of the analysis are to: 1) group people 55 and over who participate in organized bus trips into homogeneous groups into homogeneous groups according to characteristics related to the choice of operator 2) to examine the characteristics of these groups; and 3) to examine the demographic characteristics of these groups. We will focus on the first two points here. 
+
+A questionnaire was developed to assess the importance of 55 characteristics of the bus tour operators and the tours themselves using a 5-point Likert scale (5=extremely important,...,1=not important at all). Data are available for 150 subjects (there were 817 in the article). They are in the file `cluster1.RData`. 
+
+Instead of doing a cluster analysis with the 55 items of the questionnaire, the authors chose to do a questionnaire, the authors chose to do a factorial analysis beforehand in order to reduce the number of variables. More precisely, the factor analysis (common factor analysis method and varimax rotation) produced
+varimax rotation) produced 6 interpretable factors:
+
+* Social activities (`Social`): made up of 5 items
+* Operator's policies and references (`Policy`): made up of 6 items.
+* Flexible hours (`Hours`): composed of 3 items.
+* Health and Safety (`Safety`): made up of 4 items.
+* Advertising material (`Advertising`): composed of 2 items.
+* Reputation (`Reputation`): made up of 2 items.
+
+
+We can see that 22 items, among the 55, are used in the definition of these
+6 factors. In the article, the authors decided to include these 22 items in the
+the clustering analysis. For our part and in order to simplify the example
+we will instead create 6 new scales (variables) by averaging the items of each of the above factors
+and use only these 6 scales (thus 6 variables) in the cluster analysis.
+The values of these 6 variables for the 150 subjects are found in the file `cluster1.RData`. 
+
+ The data were generated in such a way that the subjects were separated into 3 groups. The group to which each subject belongs is given in the variable `Cluster`. **It is important to
+It is important to understand that in practice, we do not know the number of clusters
+It is important to understand that in practice, we do not know the number of clusters, nor which observation belongs to which cluster. Here, we will use the fact that we know
+the fact that we know the real groups to examine the performance of the different
+of the different clustering analysis methods.**
+
+
+Here is the code to read the data:
+```{r}
+load("Data/cluster1.RData")
+mydata=cluster1
+head(mydata)
+summary(mydata)
+```
+
+### Hierarchical methods
+
+We are going to use the `hclust` command which allows to do hierarchical grouping. This command has several options to use the different methods seen in class.
+
+Before proceeding to the analysis as such, the first thing to do is to calculate the dissimilarity matrix between the subjects. The command is the following:
+```{r}
+# Calculation of the Euclidean distance between the subjects
+d=dist(mydata[,1:6], method = "euclidean") 
+d[1:10]
+```
+Note that by changing the `method` option, we can compute other types of distance measures, such as the Manhattan distance seen in class for example. The `d` object created is a vector that stores the information of the triangular matrix that calculates the distance between all pairs of subjects. For example, the first 10 values of this vector give the distances between subject 1 and subjects 2 to 11.
+
+Here is the R code to perform a clustering analysis using the farthest neighbor method (option `complete`). 
+```{r}
+fit = hclust(d, method="complete")
+fit$merge[1:10,]
+```
+
+We can see the details of the grouping steps from 150 groups (1 subject in each group) to 1 group containing all subjects, using the `fi$merge` command. The ith line indicates which 2 groups are grouped together at step $i$ of the hierarchical procedure. If an element $j$ is negative, it indicates that the observation $j$ has been grouped. If an $j$ element is positive, it indicates that the clustering is done with the group containing more than one subject that was formed in step $j$. For example, the first cluster groups together topics #114 and #121. The second cluster groups together topics #31 and #73. The 8th cluster (line 8) groups together topic #109 with the cluster created in step 1 (which contains topics #114 and #121).
+
+As we have seen in the lecture notes, the information of the hierarchical procedure can be presented as a dendrogram. The following code is used to draw such a figure:
+
+```{r}
+plot(fit)
+# Added some options to make the graph prettier
+plot(fit, hang = -1, cex = 0.6)
+```
+
+  
+The dendogram should be read from bottom to top. It shows the history of the hierarchical procedure. The $Y$ axis gives, with a multiplicative factor, the distance between 2 groups. In our case, the graph is not very readable because there is a large number of subjects.
+
+In order to choose the most appropriate number of groups, we can look at the distance measure between the groups when going from $k$ groups to $k-1$ groups. This measure is given in the `height` element of the object returned by `hclust`.
+
+```{r}
+plot(149:1,fit$height)
+```
+
+
+We can see in this graph that there is a big decrease in the inter-group distance when we go from 1 to 3 groups. Then, this decrease is marginal. The idea is generally to choose a small number of groups with a fairly high inter-group distance. So 3 groups seems to be the optimal choice, which is the true number of groups.
+
+If we choose to separate the data into 3 groups, then we need to stop the 3-group hierarchical procedure and then do the assignment of subjects to the 3 groups. This can be done with the following command:
+```{r}
+groups=cutree(fit, k=3)
+# See the assignment of the first 10 subjects to the 3 groups
+groups[1:10]
+# See the number of subjects in each group
+table(groups)
+```  
+
+We can see that the method classifies 71 subjects in cluster 1, 35 subjects in cluster 2 and 44 subjects in cluster 3. We can also calculate the classification error rate (adjusted rand index) with respect to the "true" groups which are given in the `Cluster` variable. This can be done with the command `rand.index` available in the `fossil` library. The code is as follows:
+```{r}
+library(fossil)
+adj.rand.index(groups,mydata$Cluster)
+```
+
+Here, the adjusted Rand index is 0.85. A value of 1 represents a perfect match between the true groups and the estimated groups. A value of 0 represents a match obtained only by chance.
+
+We can repeat the same analysis using other types of methods, and you will see that the results vary greatly from one method to another:
+```{r}
+# Nearest neighbor method
+fit = hclust(d, method="single")
+groups=cutree(fit, k=3)
+table(groups)
+adj.rand.index(groups,mydata$Cluster)
+
+# Average linkage method
+fit = hclust(d, method="average")
+groups=cutree(fit, k=3)
+table(groups)
+adj.rand.index(groups,mydata$Cluster)
+
+# Centroid method
+fit = hclust(d, method="centroid")
+groups=cutree(fit, k=3)
+table(groups)
+adj.rand.index(groups,mydata$Cluster)
+
+# Ward method
+fit = hclust(d, method="ward")
+groups=cutree(fit, k=3)
+table(groups)
+adj.rand.index(groups,mydata$Cluster)
+```
+
+We can see for example that the `centroid` and `single` (nearest neighbor) methods classify the observations into 2 groups rather than 3. Note that it is very common to observe major differences in the results of the different clustering methods. In our example, the `average` method is the one that performs best compared to the true classification, with an adjusted Rand index of 0.93.
+
+### Non-hierarchical methods (k-means)
+We will now see the same analyses done with the $k$-mean method. The command to use is `kmeans`, and here is the code below:
+
+
+
+```{r}
+# 3 groups
+result=kmeans(mydata[,1:6],3)
+groups=result$cluster
+table(groups)
+adj.rand.index(groups,mydata$Cluster)
+```
+
+We can see that the results differ significantly, compared to the hierarchical algorithms, but in our case the $k$-average method performs better than the hierarchical algorithms. Note also that the `kmeans` command has several options which we will leave to you to study. Note that the different algorithms proposed in the `algorithm` option differ from each other in the way the centroids are updated at each step. 
+
+### Effect of standardizing variables
+ You can also redo the analysis by standardizing the variables and evaluate the difference in the results. The command to standardize variables is `scale` and can be used in the following way:
+```{r}
+mydata2=scale(mydata[,1:6],center=TRUE, scale=TRUE)
+mydata2=data.frame(mydata2,Cluster=mydata$Cluster)
+apply(mydata2,2,mean)
+apply(mydata2,2,sd)
+```
+
+We can redo all the analyses with the standardized data, using the `rand` index as a performance measure.
+
+```{r}
+# Complete method
+d=dist(mydata2[,1:6], method = "euclidean")
+fit = hclust(d, method="complete")
+groups=cutree(fit, k=3)
+adj.rand.index(groups,mydata2$Cluster)
+
+# Single method (nearest neighbor)
+d=dist(mydata2[,1:6], method = "euclidean")
+fit = hclust(d, method="single")
+groups=cutree(fit, k=3)
+adj.rand.index(groups,mydata2$Cluster)
+
+# Average linkage method
+d=dist(mydata2[,1:6], method = "euclidean")
+fit = hclust(d, method="average")
+groups=cutree(fit, k=3)
+adj.rand.index(groups,mydata2$Cluster)
+
+
+# Centroid method
+d=dist(mydata2[,1:6], method = "euclidian")
+fit = hclust(d, method="centroid")
+groups=cutree(fit, k=3)
+adj.rand.index(groups,mydata2$Cluster)
+
+# Ward method
+d=dist(mydata2[,1:6], method = "euclidean")
+fit = hclust(d, method="ward")
+groups=cutree(fit, k=3)
+adj.rand.index(groups,mydata2$Cluster)
+
+# K-means method
+result=kmeans(mydata2[,1:6],3)
+groups=result$cluster
+adj.rand.index(groups,mydata2$Cluster)
+```
+
+We can see that in our case, standardizing the data has almost no impact on the results of all the algorithms, except one: the nearest neighbor method, whose rand index goes from 0.62 to 0.019! We can run this algorithm again to see the classification a little better:
+
+```{r}
+
+# Single method (nearest neighbor)
+d=dist(mydata2[,1:6], method = "euclidean")
+fit = hclust(d, method="single")
+groups=cutree(fit, k=3)
+table(groups)
+adj.rand.index(groups,mydata2$Cluster)
+```
+
+In fact, we can see that the algorithm essentially classifies all the observations in a single group, hence the very low concordance rate with the real groups. Beware, the nearest neighbor method is known to give results that can be very variable... so use with caution.
+
+## Integrated example with a supervised problem
+In this example, we will work with data from questionnaires on people's feelings about the Christmas period. A total of 450 individuals answered 20 questions on a Lickert scale of 1 to 7 (1=not at all and 7=absolutely).
+
+For the first 14 questions, people were asked to indicate whether, on a scale of 1 to 7, Christmas made them feel...
+
+
+* in a good mood
+* annoyed
+* happy
+* joyful
+* disappointed
+* delighted
+* excited
+* sad
+* warm
+* peaceful
+* irritated
+* carefree
+* light-hearted
+* bored
+
+
+For questions 15-20, people were asked to say whether, on a scale of 1 to 7, the following phrases apply to them:
+ 
+* When Christmas comes, I follow the seasonal traditions
+* I love to store at Christmas
+* It's important to get into the Christmas spirit by participating in organized activities
+* Christmas is my favorite time of year
+* Christmas shopping is one of the activities I hate the most
+* I am very attached to all the Christmas traditions
+
+
+
+ 
+ 
+There is also a variable of interest, Q21, which is the amount of money spent on Christmas this year. The purpose of the analysis is to understand what factors can predict the amount of money spent. Of course, we could run a predictive model with all the variables, but several of them are highly correlated, and the interpretability of the model would be greatly affected.
+
+Instead of using all the variables, we will try 2 strategies: 1) find interpretable factors from the data (factor analysis) and use in the model new variables built from these factors, 2) do a cluster analysis, and see if we can identify interpretable groups that we could use in the analysis.
+
+### Factor analysis
+We will start by doing a factor analysis by trying several numbers of factors.
+
+```{r error=TRUE}
+# Read the data
+noel=read.csv("Data/christmas.csv")
+head(noel)
+
+# Remove variable Y for factor analysis
+mydata=noel[,-21]
+
+# Factorial analysis
+factanal(mydata,1)
+factanal(mydata,2)
+factanal(mydata,3)
+factanal(mydata,4)
+factanal(mydata,5)
+factanal(mydata,6)
+
+print(loadings(factanal(mydata,4)),cutoff=.3)
+print(loadings(factanal(mydata,5)),cutoff=.3)
+print(loadings(factanal(mydata,7)),cutoff=.3)
+```
+
+You really have to analyze each solution to see which one interprets best (Wow criterion...). Here we will choose the 5-factor solution. The (subjective) interpretation that we can give to these factors would be the following:
+
+* Bonhomie
+* Christmas shopping
+* Abandonment to joy
+* Abatement
+* Christmas ritual
+
+ 
+Before constructing new variables for each of these factors, the consistency of the measures within a factor should be checked using Cronbach's alpha. 
+```{r}
+library(psy)
+cronbach(mydata[,c(1,3,4,6,7,9,10)])
+cronbach(mydata[,c(16,19)])
+cronbach(mydata[,c(12,13)])
+cronbach(mydata[,c(2,5,8,11,14)])
+cronbach(mydata[,c(15,17,18,20)])
+```
+
+These results show us that we need to take a closer look at the shopping factor. The two variables being negatively correlated, we will have to reverse the sign of one of the two variables in the calculation of the score.
+```{r}
+cor(mydata[,16],mydata[,19])
+cronbach(cbind(noel[,16],-noel[,19]))
+```
+
+Here is the code to create the new variables:
+```{r}
+bonhomie=apply(mydata[,c(1,3,4,6,7,9,10)],1,mean)
+shopper=(mydata[,16]+8-noel[,19])/2
+abandon=apply(mydata[,c(12,13)],1,mean)
+dejection=apply(mydata[,c(2,5,8,11,14)],1,mean)
+ritualist=apply(mydata[,c(15,17,18,20)],1,mean)
+```
+
+Once these scores are created, we can use them in a model to predict the variable $Y$:
+```{r}
+factors=data.frame(bonhomie,shopper,abandon,dejection,ritualist)
+Y=read.csv("Data/christmas.csv")[,21]
+summary(lm(Y~.,data=factors))
+```
+
+The new variables created seem to explain the amount spent. This can be useful for developing marketing strategies...
+
+Instead of taking the average of the variables of each factor, we could have also calculated a score based on the weights of the factors. The code is then the following:
+```{r}
+fanoel=factanal(mydata,5,scores="regression")
+
+# Calculation of new scores for each subject
+newfactors=data.frame(fanoel$score)
+head(newfactors)
+
+# Correlation between new and average factors
+round(cor(fanoel$score,factors),2)
+```
+
+The same analysis can then be repeated:
+```{r}
+summary(lm(Y~.,data=newfactors))
+```
+
+We see that the results are still quite different, but the $R^2$ of the model is the same.
+
+### Clustering analysis
+We will do a cluster analysis with the k-means method, assuming 5 groups (to compare with the factorial analysis)
+```{r}
+result=kmeans(mydata,5)
+groups=result$cluster
+table(groups)
+```
+ 
+There is no formal way to interpret the clusters, with a variable importance measure for each cluster. However, one way to assess the contribution of each variable to each cluster is simply to fit a regression with the variable as the dependent variable and the cluster indicator (binary) as the explanatory variable. The value of the $t$ statistic can be used as a measure of variable importance. Here is the code that returns for group 1 the $t$ statistic and its p-value:
+ 
+```{r}
+group1=(groups==1)
+tstat=matrix(0,nrow=20,ncol=2)
+for (i in 1:20)
+{
+  
+  tstat[i,]=summary(lm(mydata[,i]~group1))$coefficient[2,c(2,4)]
+}
+tstat
+```
+
+The results are not very conclusive for group 1, it is difficult to see which variables are the most discriminating. If we run the same code again for the other groups (results not shown here), it is more or less the same, except for group 3 which seems to represent people who like shopping.
+
+We can still try to see if group membership has any predictive power on the variable $Y$:
+
+```{r}
+groups=as.factor(groups)
+summary(lm(Y~groups))
+```
+
+The predictive power of this model is much lower than that achieved with the factor analysis variables ($R^2$ of 7\% instead of 32\%). 
+
+Note that putting the group index in a prediction model can sometimes be a good strategy (even if it is not the case here)...
+
+

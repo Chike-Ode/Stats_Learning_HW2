@@ -1,0 +1,191 @@
+---
+title: "Chapter 11 - Clustering Analysis (part 2)"
+output:
+  html_document: default
+  pdf_document: default
+  number_sections: true
+---
+
+<style>
+p.exercice {
+background-color: #DBDBDB;
+padding: 10px;
+border: 1px solid black;
+margin-left: 5px;
+border-radius: 5px;
+font-style: italic;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse,verbose=FALSE)
+```
+
+<br>
+<br>
+
+In this part of the tutorial, we will see an application of mixture models. These models can be fitted using the `Mclust` function, available in the `mclust` library. We will see two different examples: on simulated data and on real data.
+
+## Mixture models on simulated data.
+
+In order to understand how mixture models work, we will start by analyzing data simulated according to a mixture of Gaussian distributions - which corresponds exactly to the assumptions of the mixture model. These data represent an ideal scenario for using these models.
+
+In the considered scenario, we consider a mixture of $K=3$ Gaussian populations. Two variables $X_1$ and $X_2$ are considered such that for each observation $i$ of population $k$:
+$$
+(X_{1i},X_{2i})\sim \mathcal{MN}(\mu_k,\Sigma_k),
+$$
+
+where $\mu_k=(\mu_{1k},\mu_{2k})$ and $\Sigma_k$ is an identical diagonal matrix for each population such that $diag(\Sigma_k)=(\sigma^2,\sigma^2)$. Here is the code to simulate these data:
+
+
+
+```{r}
+set.seed(12355)
+mu1=matrix(runif(6),ncol=3)
+mu1
+mydata1=matrix(c(rnorm(200,mean=mu1[,1],sd=.01),
+              rnorm(200,mean=mu1[,2],sd=.01),
+              rnorm(200,mean=mu1[,3],sd=.01)), ncol=2,byrow=T)
+colnames(mydata1) <- c("X1","X2")
+head(mydata1)
+dim(mydata1)
+
+plot(mydata1,col=rep(c("blue","green","red"),each=100))
+points(t(mu1),pch=16,cex=2,col="black")
+```
+
+As we can see, the groups are extremely well separated and it will probably be very easy to find them using a mixture model. By increasing the variance of the Gaussian distributions, it is possible to simulate a little more "mixed" data, as below:
+
+```{r}
+set.seed(125)
+mu2=matrix(runif(6),ncol=3)
+mu2
+mydata2=matrix(c(rnorm(200,mean=mu2[,1],sd=.2),
+              rnorm(200,mean=mu2[,2],sd=.2),
+              rnorm(200,mean=mu2[,3],sd=.2)), ncol=2,byrow=T)
+colnames(mydata2) <- c("X1","X2")
+
+plot(mydata2,col=rep(c("blue","green","red"),each=100))
+points(t(mu2),pch=16,cex=2,col="black")
+```
+
+We will now fit a mixture model on these 2 data sets. For the first data set, the code is below:
+```{r}
+library(mclust)
+model1=Mclust(mydata1)
+summary(model1)
+```
+
+
+We can see here that the R output reports a model with 3 groups (which corresponds to the real data), for which the classification is perfect. Note that if no value is specified for the number of groups (option `G=`), the `Mclust` function tries several mixture models by default with `G=1:9` groups. 
+The `summary` output of R reports the best model according to the BIC criterion. Also, as we saw in the course, several alternatives are available for modeling the variance-covariance structure of the groups (option `modelNames`). If nothing is specified, the function tries all diagonal and spherical models by default with `modelNames=c("EII", "VII", "EEI", "EVI", "VEI", "VVI")` . The best model according to the BIC is then reported. Here, the best model is the EII (spherical, equal volume and shape) model. The term spherical indicates that the variances are equal in all directions and equal volume indicates that all variances are assumed to be equal. This corresponds exactly to the model under which the data were simulated. 
+
+
+The BIC graph for all models and all numbers of groups can be obtained with the following command:
+```{r}
+plot(model1, what = "BIC")
+```
+
+Be careful, the function `Mclust` uses the negative version of the BIC that we defined in class. Except for one sign, the definition is the same, but here we try to maximize the BIC and not to minimize it. It is not clear from the graph whether the best model selected is indeed the EII model, but we can see the BIC values with the following function:
+```{r}
+model1$BIC
+```
+
+The model parameters can be obtained with the following command:
+```{r}
+model1$parameters
+```
+
+We can see that the mixing probabilities for the 3 populations are estimated at 1/3 each, which corresponds to the reality of the data. We can compare the estimated means for the 3 populations with the true means:
+```{r}
+model1$parameters$mean
+mu1
+```
+
+We can see that the means are very well estimated. We can also compare the values of the estimated variances with the real variances:
+
+```{r}
+model1$parameters$variance$Sigma
+Vraie_variance=0.01^2
+Vraie_variance
+```
+
+Again, we can see that the variance parameters are very well estimated by the model. 
+
+The values of the posterior probabilities for each group and each observation can be found in the `z` object:
+
+```{r}
+head(model1$z)
+dim(model1$z)
+model1$z[100:110,]
+model1$z[200:210,]
+```
+
+Here again, we can see that the estimated probabilities are very high for the population to which the observation belongs, and almost null for the other populations. Based on a classification of the observations according to the highest posterior probability, the classification can be obtained as follows:
+```{r}
+model1$classification
+```
+
+Finally, we can visualize the grouping graphically with the following function:
+```{r}
+plot(model1, what = c("classification"))
+```
+
+Of course, the example we have worked with so far is trivial. Let's start the same analysis again with the less perfect data we have generated:
+```{r}
+model2=Mclust(mydata2)
+summary(model2)
+```
+
+We can see that the best model selected is the good EII model. However, the classification is no longer perfect, as we can also see graphically:
+```{r}
+par(mfrow=c(1,2))
+plot(model2, what = c("classification"))
+title("Classification")
+plot(mydata2,col=rep(c("blue","red","green"),each=100))
+points(t(mu2),pch=16,cex=2,col="black")
+title("Données originales")
+```
+
+
+## Analysis of US arrest data 
+
+We will analyze here a data set available in R `USArrest` which contains the arrest statistics per 100,000 inhabitants for murder (variable `Murder`), assault (variable `Assault`) or rape (variable `Rape`) for 50 states of the United States in 1973. The proportion of people living in urban areas is also given in the variable `UrbanPop`. We will perform a clustering analysis using a mixture model on these 4 variables.
+
+```{r}
+head(USArrests)
+model=Mclust(USArrests)
+summary(model)
+plot(model, data=USArrests, what="BIC")
+```
+
+The best model is a VEI (diagonal, equal shape) model with 3 groups. We can see with the BIC graph that there is a large variation in the fit of these models.
+
+The posterior probabilities of the groups are given below:
+```{r}
+round(model$z,2)
+```
+
+We can see that the classification seems generally quite certain, except for the states of Idhao, Delaware and Arkansas.
+
+We can look at the classification of the states like this:
+
+```{r}
+groupe=model$classification
+groupe
+
+names(groupe[groupe==1])
+names(groupe[groupe==2])
+names(groupe[groupe==3])
+```
+
+The grouping of the states can be visualized as follows:
+```{r}
+plot(model, what="classification")
+```
+
+We can see that the red group (group2) seems to represent the group of states with the lowest arrest rate. This group also corresponds to the most rural states. States in the blue group (group 1) have a higher arrest rate than those in the green group.
+
+
+

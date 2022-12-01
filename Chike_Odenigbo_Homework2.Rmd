@@ -21,6 +21,8 @@ output:
 #install.packages("factoextra")
 #install.packages('pls')
 #install.packages('psy')
+#install.packages("fossil")
+library(fossil)
 library(psy)
 library(pls)
 library(mogavs)
@@ -416,7 +418,7 @@ abline(v = 8, col = "blue", lty = 3)
 ```
 
 ## Section 4 Factor Analysis
-### Question 1.1
+### Question 4.1
 In this question, we will analyze data on different measures of pastry texture. The data have 50 observations and 5 variables were measured:
 
 * Oil: oil content of the pastry
@@ -429,13 +431,145 @@ The data are available in the file food.csv. The column labeled X represents the
 
 Perform a factor analysis on these data. Identify the optimal number of factors, describe them and interpret them.
 **ANSWER:**
-***I would save the first 50 components***
+***I would use 2 factors for the food data set given that the p-value for 2 factors of 0.603 is significantly greater than the pvalue of 1.82*10^-7. Specifying only 1 factor seems to try to force the oil as a contributor but it does not have any real semantic meaning to the other variables yet the algorithm determines it has a strong impact on the factor. The first factor will be composed of density (0.9 weight in defining factor) and fracture (0.64 correlation weight in defining factor) and the second factor will be composed of crispy (0.64 weight in defining factor) and hardness (0.76 weight in defining factor) given their higher respective loading coefficients to the specific factor. Oil seems to not be assign to any of the factors. The latent variable that factor 1 seems to represent is how hollow the inside of the pastry is which is reflected by the ability of the pastry to bend and its thickness. The latent variable for factor 2 seems to be how soft the outside of the pastry is reflected by its ease of biting and its crispyness. ***
 ```{r}
 food.df = read.table("./Data/food.csv", header=TRUE, sep =",")
 
-#fact = 
-factanal(food.df[,-1], factors = 2,rotation = "varimax")$values
+Pval.factanal <- function(x)
+{
+    p <- nrow(x$loadings); factors <- x$factors
+    if(!is.na(x$n.obs) && x$dof > 0) {
+        dof <- x$dof
+        stat <- (x$n.obs - 1 - (2 * p + 5)/6 -
+                 (2 * factors)/3) * x$criteria["objective"]
+        pchisq(stat, dof, lower.tail = FALSE)
+    } else NA
+}
+factanal.2fact = factanal(food.df[,-1], factors = 2,rotation = "varimax")
+factanal.1fact = factanal(food.df[,-1], factors = 1,rotation = "varimax")
+paste('the pvalue for 2 factors is: ', Pval.factanal(factanal.2fact))
+paste('the pvalue for 1 factor is: ', Pval.factanal(factanal.1fact))
+
+print('2 Factors Results')
+(factanal.2fact$loadings)
+print('1 Factor1 Results')
+(factanal.1fact$loadings)
+#Pval.factanal(factanal(food.df[,-1], factors = 1,rotation = "varimax"))
+#factanal(food.df[,-1], factors = 3,rotation = "varimax")
+#factanal(food.df[,-1], factors = 2,rotation = "varimax")#$scores
+#factanal(food.df[,-1], factors = 1,rotation = "varimax")
+
+cronbach(food.df[,c('Density','Fracture')])
+cronbach(food.df[,c('Crispy','Hardness')])
+cronbach(food.df[,c('Crispy','Hardness','Density','Fracture')])
 
 cronbach(food.df[,-1])
 
+```
+
+
+## Section 5 K-Means
+In this question, you will perform a K-means classification manually with K=2 in the small data example below which contains n=6 observations and p=2 variables:
+```{r}
+mydata=matrix(c(1,4,1,3,0,4,5,1,6,2,4,0),ncol=2,byrow=T)
+colnames(mydata)=c("X1","X2")
+row.names(mydata)=1:6
+mydata
+
+```
+
+### Question 5.1
+Graph the data
+```{r}
+plot(mydata[,"X1"], mydata[,"X2"])
+
+```
+
+### Question 5.2
+At each step of the algorithm, explain what you are doing and i) report the group assignment table to the observations and ii) graph the data by indicating group 1 in red, group 2 in green and adding the 2 centroids on the graph.
+**ANSWER:**
+**The methodology for the clustering analysis was to compare kmeans clustering with random initialization and hierarchical clustering initialization. Given the underlying structure of the data which has natural clusters, the difference in clusters does does not change much with the two initialization method. The only real change is that the cluster group name changes with random initialization compared to the other 2 methods tested whereby cluster 1 is assigned to the same observations as cluster 2 and vice versa.**
+```{r}
+mydata=matrix(c(1,4,1,3,0,4,5,1,6,2,4,0),ncol=2,byrow=T)
+colnames(mydata)=c("X1","X2")
+row.names(mydata)=1:6
+# Step 1: Even though variables are on the similarly valued, standardizing is done to ensure they are on same scale
+mydata.scaled = scale(mydata,center=TRUE, scale=TRUE)
+mydata.scaled
+# Step 2: Get distance matrix
+distance.scaled = dist(mydata.scaled,method = "euclidean")
+distance.scaled
+# Step 3: perform hierachical clustering to get initial centroids for kmeans and select 2 clusters which was specified for kmeans
+h.clust = hclust(distance.scaled, method = "centroid")
+h.clust
+h.clust$merge
+groups=cutree(h.clust, k=2)
+groups
+mydata.scaled = (as.data.frame(mydata.scaled))
+mydata.scaled$clusters_dendo = groups
+mydata = (as.data.frame(mydata))
+mydata$clusters_dendo = groups
+colors_ = c("red","green")
+names(colors_) = c("1","2")
+#plot(mydata$X1, mydata$X2 , col = c("red", "green")[mydata$clusters_dendo], main = "Hierarchical Clustering",pch = 19)
+plot(mydata$X1, mydata$X2 , col = colors_[mydata$clusters_dendo], main = "Hierarchical Clustering",pch = 19)
+
+# Step 4: Get average per dendorgram cluster to initialize kmeans
+kmeans.initial.clusters = subset(aggregate(mydata.scaled[, 1:3], list(mydata.scaled$clusters_dendo), mean),select = c('X1','X2'))
+
+# Step 5: Initialize kmeans object with hclust results
+kmeans.hclust = kmeans(x=subset(mydata.scaled,select = c('X1','X2')),centers = kmeans.initial.clusters)
+
+print('Cluster Centers for Kmeans with Hierarchical Clusters Initialization')
+kmeans.hclust$centers
+print('Cluster Centers from Hierarchical Clusters')
+as.matrix(kmeans.initial.clusters)
+
+# Step 6: Kmeans with random initialization
+kmeans.rand = kmeans(x=subset(mydata.scaled,select = c('X1','X2')),centers = 2) #using scaled data
+#kmeans.rand = kmeans(x=subset(mydata,select = c('X1','X2')),centers = 2)
+print('Cluster Centers for Kmeans with Random Initialization')
+kmeans.rand$centers
+mydata$clusters_km_rand = kmeans.rand$cluster
+mydata$clusters_km_hclust = kmeans.hclust$cluster
+#plot(mydata$X1, mydata$X2 , col = c("red", "green")[mydata$clusters_km_rand], main = "KMeans Random Initialization",pch = 19)
+plot(mydata$X1, mydata$X2 , col = colors_[mydata$clusters_km_rand], main = "KMeans Random Initialization",pch = 19)
+points(kmeans.rand$centers[,'X1'][1], kmeans.rand$centers[,'X1'][2], cex = 2, pch = 6, col ="blue")
+
+
+#plot(mydata$X1, mydata$X2 , col = c("red","green")[mydata$clusters_km_hclust], main = "KMeans Hierarchical Initialization",pch = 19)
+kmeans.rand$centers[,'X1'][1]
+
+
+plot(mydata$X1, mydata$X2 , col = colors_[mydata$clusters_km_hclust], main = "KMeans Hierarchical Initialization",pch = 19)
+points(kmeans.hclust$centers[,'X1'][1], kmeans.hclust$centers[,'X1'][2], cex = 2, pch = 6, col ="blue")
+
+print(mydata)
+#mydata.scaled
+#mydata.scaled = as.data.frame(mydata.scaled)
+#groups$merge
+#table(groups)
+#typeof(groups)
+#adj.rand.index(groups,mydata.scaled$Cluster)
+#mydata.scaled = data.frame(mydata.scaled)
+#mydata.scaled[, 'h_clusters'] = groups$cluster data.frame(mydata2,Cluster=mydata$Cluster)
+#kmeans(mydata,2)
+
+
+
+```
+
+```{r}
+kmeans.rand$centers 
+plot(mydata$X1, mydata$X2 , col = colors_[mydata$clusters_km_rand], main = "KMeans Random Initialization",pch = 19)
+points(0.6666667, 3.666667, cex = 2, pch = 25, col ="red") # centroids
+points(5, 1, cex = 2, pch = 25, col ="green") # centroid
+```
+```{r}
+kmeans.initial.clusters = subset(aggregate(mydata[, 1:3], list(mydata$clusters_dendo), mean),select = c('X1','X2'))
+kmeans.hclust = kmeans(x=subset(mydata,select = c('X1','X2')),centers = kmeans.initial.clusters)
+kmeans.hclust$centers 
+plot(mydata$X1, mydata$X2 , col = colors_[mydata$clusters_km_hclust], main = "KMeans Random Initialization",pch = 19)
+points(0.6666667, 3.666667, cex = 2, pch = 25, col ="red") # centroids
+points(5, 1, cex = 2, pch = 25, col ="green") # centroid
 ```
